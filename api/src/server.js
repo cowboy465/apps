@@ -1,5 +1,6 @@
 import http from "node:http";
 import express from "express";
+import cors from "cors";
 import { WebSocketServer } from "ws";
 import { config } from "./config.js";
 import { createSessionStore } from "./session/store.js";
@@ -12,6 +13,13 @@ import { ttsSynthesize } from "./pipeline/tts.js";
 import { sendTelegramTurnLog } from "./integrations/telegramLog.js";
 
 const app = express();
+app.use(
+  cors({
+    origin: config.miniappOrigin === "*" ? true : config.miniappOrigin,
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["content-type", "x-telegram-init-data", "authorization"],
+  }),
+);
 app.use(express.json({ limit: "2mb" }));
 
 const { type: storeType, store: sessionStore } = await createSessionStore(config.redisUrl);

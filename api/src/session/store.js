@@ -59,8 +59,9 @@ export class RedisSessionStore {
     if (!existing) return null;
     const updated = { ...existing, ...patch, updatedAt: new Date().toISOString() };
     const key = this.key(sessionId);
-    if (ttlSec) {
-      await this.redis.set(key, JSON.stringify(updated), "EX", ttlSec);
+    const ttl = ttlSec ?? (await this.redis.ttl(key));
+    if (ttl && ttl > 0) {
+      await this.redis.set(key, JSON.stringify(updated), "EX", ttl);
     } else {
       await this.redis.set(key, JSON.stringify(updated));
     }

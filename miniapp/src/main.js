@@ -148,7 +148,20 @@ function stopRecording(_commit = false) {
 
 async function startSession() {
   const tg = window.Telegram?.WebApp;
-  initData = tg?.initData || "";
+  if (!tg) {
+    throw new Error("Telegram WebApp SDK not found. Open from bot menu/button inside Telegram.");
+  }
+
+  try {
+    tg.ready?.();
+    tg.expand?.();
+  } catch {}
+
+  initData = tg.initData || "";
+  if (!initData) {
+    await new Promise((r) => setTimeout(r, 80));
+    initData = tg.initData || "";
+  }
   if (!initData) throw new Error("Missing Telegram initData. Open inside Telegram Mini App.");
 
   const res = await fetch("/api/realtime/session/start", {
@@ -229,8 +242,8 @@ function connectWs(streamToken) {
 }
 
 els.connectBtn.addEventListener("click", async () => {
-  await ensureMic();
   if (state.connected) {
+    await ensureMic();
     ws.send(ClientEvent.StopContinuous, { reason: "client_request" });
     ws.close();
     await stopSession("client_request");
@@ -238,6 +251,7 @@ els.connectBtn.addEventListener("click", async () => {
   } else {
     try {
       const { streamToken } = await startSession();
+      await ensureMic();
       connectWs(streamToken);
     } catch (err) {
       addTranscript("assistant", `Connect failed: ${err.message}`);
@@ -246,7 +260,6 @@ els.connectBtn.addEventListener("click", async () => {
 });
 
 els.pttBtn.addEventListener("pointerdown", async () => {
-  await ensureMic();
   if (!state.connected) {
     try {
       const { streamToken } = await startSession();
@@ -256,6 +269,7 @@ els.pttBtn.addEventListener("pointerdown", async () => {
       return;
     }
   }
+  await ensureMic();
   startRecording();
 });
 els.pttBtn.addEventListener("pointerup", () => {

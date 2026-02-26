@@ -40,6 +40,9 @@ export function createRealtimeRouter({ config, sessionStore }) {
 
     const existing = await sessionStore.get(sessionId);
     if (!existing) return res.status(404).json({ error: "session not found" });
+    if (String(existing?.telegramUser?.id || "") !== String(req.telegram?.user?.id || "")) {
+      return res.status(403).json({ error: "forbidden" });
+    }
 
     const updated = await sessionStore.update(sessionId, {
       state: "stopped",

@@ -62,7 +62,13 @@ export function verifyTelegramInitData(rawInitData, botToken, maxAgeSec = 24 * 6
 
 export function requireTelegramInitData({ botToken }) {
   return (req, res, next) => {
-    const initData = req.header("x-telegram-init-data") || req.body?.initData;
+    const auth = req.header("authorization") || "";
+    const authInitData = auth.replace(/^(Bearer|tma)\s+/i, "").trim();
+    const initData =
+      req.header("x-telegram-init-data") ||
+      req.body?.initData ||
+      req.body?.init_data ||
+      (authInitData || undefined);
     const result = verifyTelegramInitData(initData, botToken);
 
     if (!result.valid) {
