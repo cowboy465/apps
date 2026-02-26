@@ -58,6 +58,8 @@ let mediaRecorder;
 let vad;
 let sessionId = null;
 let initData = window?.Telegram?.WebApp?.initData || "";
+let gotTtsAudio = false;
+let lastAssistantText = "";
 
 const player = new StreamingAudioPlayer({
   onState: (mode) => {
@@ -65,6 +67,16 @@ const player = new StreamingAudioPlayer({
     renderStatus();
   },
 });
+
+function speakLocal(text) {
+  if (!text || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 1;
+  u.pitch = 1;
+  u.lang = "en-US";
+  window.speechSynthesis.speak(u);
+}
 
 function renderStatus() {
   const pills = [
@@ -196,17 +208,23 @@ function connectWs(streamToken) {
         state.partialAssistant = payload?.text || "";
       } else if (type === ServerEvent.LLMFinal) {
         const finalText = payload?.text || "";
+        lastAssistantText = finalText;
+        gotTtsAudio = false;
         addTranscript("assistant", finalText);
         state.partialAssistant = "";
       } else if (type === ServerEvent.TTSChunk) {
         if (payload?.audioBase64 && payload.audioBase64 !== "[base64-audio-chunk-placeholder]") {
+          gotTtsAudio = true;
           if (payload?.format === "audio/mpeg") {
             await player.enqueueEncodedBase64(payload.audioBase64, "audio/mpeg");
           } else {
             await player.enqueuePcm16Base64(payload.audioBase64, 24000);
           }
         }
-      } else if (type === ServerEvent.TTSEnd || type === ServerEvent.TurnCommitted || type === ServerEvent.SessionStopped) {
+      } else if (type === ServerEvent.TTSEnd) {
+        if (!gotTtsAudio && lastAssistantText) speakLocal(lastAssistantText);
+        gotTtsAudio = false;
+      } else if (type === ServerEvent.TurnCommitted || type === ServerEvent.SessionStopped) {
         // completion hooks
       } else if (type === ServerEvent.Error) {
         addTranscript("assistant", `Error: ${payload?.reason || payload?.message || "unknown"}`);
