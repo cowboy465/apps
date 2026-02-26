@@ -58,7 +58,6 @@ let mediaRecorder;
 let vad;
 let sessionId = null;
 let initData = window?.Telegram?.WebApp?.initData || "";
-let gotTtsAudio = false;
 
 const player = new StreamingAudioPlayer({
   onState: (mode) => {
@@ -66,16 +65,6 @@ const player = new StreamingAudioPlayer({
     renderStatus();
   },
 });
-
-function speakLocal(text) {
-  if (!text || !window.speechSynthesis) return;
-  window.speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(text);
-  u.rate = 1;
-  u.pitch = 1;
-  u.lang = "en-US";
-  window.speechSynthesis.speak(u);
-}
 
 function renderStatus() {
   const pills = [
@@ -209,10 +198,8 @@ function connectWs(streamToken) {
         const finalText = payload?.text || "";
         addTranscript("assistant", finalText);
         state.partialAssistant = "";
-        if (!gotTtsAudio) speakLocal(finalText);
       } else if (type === ServerEvent.TTSChunk) {
         if (payload?.audioBase64 && payload.audioBase64 !== "[base64-audio-chunk-placeholder]") {
-          gotTtsAudio = true;
           if (payload?.format === "audio/mpeg") {
             await player.enqueueEncodedBase64(payload.audioBase64, "audio/mpeg");
           } else {
@@ -220,7 +207,6 @@ function connectWs(streamToken) {
           }
         }
       } else if (type === ServerEvent.TTSEnd || type === ServerEvent.TurnCommitted || type === ServerEvent.SessionStopped) {
-        gotTtsAudio = false;
         // completion hooks
       } else if (type === ServerEvent.Error) {
         addTranscript("assistant", `Error: ${payload?.reason || payload?.message || "unknown"}`);
@@ -253,13 +239,18 @@ els.connectBtn.addEventListener("click", async () => {
       const { streamToken } = await startSession();
       await ensureMic();
       connectWs(streamToken);
+      if (state.continuous && !state.recording) {
+        startRecording();
+      }
     } catch (err) {
       addTranscript("assistant", `Connect failed: ${err.message}`);
     }
   }
 });
 
-els.pttBtn.addEventListener("pointerdown", async () => {
+els.pttBtn.addEventListener("pointerdown", async (e) => {
+  e.preventDefault();
+  els.pttBtn.setPointerCapture?.(e.pointerId);
   if (!state.connected) {
     try {
       const { streamToken } = await startSession();
@@ -272,13 +263,21 @@ els.pttBtn.addEventListener("pointerdown", async () => {
   await ensureMic();
   startRecording();
 });
-els.pttBtn.addEventListener("pointerup", () => {
+els.pttBtn.addEventListener("pointerup", (e) => {
+  e.preventDefault();
   stopRecording(false);
   ws?.send(ClientEvent.VadState, { state: "end" });
+  if (els.pttBtn.hasPointerCapture?.(e.pointerId)) {
+    els.pttBtn.releasePointerCapture(e.pointerId);
+  }
 });
-els.pttBtn.addEventListener("pointercancel", () => {
+els.pttBtn.addEventListener("pointercancel", (e) => {
+  e.preventDefault();
   stopRecording(false);
   ws?.send(ClientEvent.VadState, { state: "end" });
+  if (els.pttBtn.hasPointerCapture?.(e.pointerId)) {
+    els.pttBtn.releasePointerCapture(e.pointerId);
+  }
 });
 els.pttBtn.addEventListener("lostpointercapture", () => {
   stopRecording(false);
@@ -287,6 +286,8 @@ els.pttBtn.addEventListener("lostpointercapture", () => {
 
 els.continuous.addEventListener("change", (e) => {
   state.continuous = e.target.checked;
+  if (state.connected && state.continuous && !state.recording) startRecording();
+  if (state.connected && !state.continuous && state.recording) stopRecording(false);
 });
 
 els.silenceMs.addEventListener("change", () => {

@@ -75,6 +75,10 @@ body {
   border-radius: 12px;
   min-height: 46px;
   font-weight: 600;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .btn.primary { background: #1f63b4; border-color: #4591e8; }
